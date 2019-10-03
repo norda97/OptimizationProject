@@ -1,9 +1,10 @@
-// Input: DataSetSize, BufferSize, DatasetFilename, OutputFilename
+// Input: datasetSize, BufferSize, DatasetFilename, OutputFilename
 // Output: the file OutputFilename containing the sorted dataset.
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <math.h>
 
 float generateRand(int rmax) {
 	//Generate a floating point random number between 0 and rmax
@@ -29,33 +30,53 @@ int createDataset(int datasetSize, char *path) {
 	}
 
 	int e = fwrite(v, sizeof(float), datasetSize, f);
+
+	// printf("Created file: ");
+	// for (int i = 0; i < datasetSize; i++)
+	// 	printf("%.1f, ", v[i]);
+
 	fclose(f);
 	return 1;
 }
 
-float* loadDataset(int dataSetSize, char *path) {
+float* loadDataset(int datasetSize, char *path, size_t blockSize) {
 	FILE *fp;
-	float *v = (float*)malloc(sizeof(float) * dataSetSize);
+	float *v = (float*)malloc(sizeof(float) * datasetSize);
 	fp = fopen(path , "r" );
+	
+	// Calc number of block to retrieve
+	size_t fileSize = datasetSize * sizeof(float);
+	double count = (double)fileSize/(double)blockSize;
+	count = ceil(count);
 
-	for(int i = 0; i < dataSetSize; i++) {
-		fread(&v[i], sizeof(float), 1, fp);
+	int index = 0;
+	for(int i = 0; i < (int)count; i++) {
+		fread(&v[index], blockSize, 1, fp);
+		index += blockSize / sizeof(float);
 	}
+
 	// TIP you can define you own buffer, buffer size and you can read blocks of data of size > 1
 	fclose(fp);
 
 	return v;
 }
 
-int writeDataset(float* v, int dataSetSize, char *path, float avg, float min, float max) {
+int writeDataset(float* v, int datasetSize, char *path, size_t blockSize, float avg, float min, float max) {
 	FILE *fp;
 	fp = fopen(path , "w" );
 
 	fwrite(&avg, sizeof(float), 1, fp);
 	fwrite(&min, sizeof(float), 1, fp);
 	fwrite(&max, sizeof(float), 1, fp);
-	for(int i=0; i<dataSetSize; i++){
-		fwrite((void*)(&v[i]), sizeof(float), 1, fp);
+
+	size_t fileSize = datasetSize * sizeof(float);
+	double count = (double)fileSize/(double)blockSize;
+	count = ceil(count);
+
+	int index = 0;
+	for(int i=0; i<(int)count; i++){
+		fwrite(&v[index], blockSize, 1, fp);
+		index += blockSize / sizeof(float);
 	}
 	
 	// TIP you can define you own buffer, buffer size and you can write blocks of data of size > 1
@@ -124,13 +145,22 @@ int main(int argc, char *argv[]) {
 	// Generate random seeds
 	srand((unsigned int)time(NULL));
 
-	int dataSetSize = 0;
+	// Timers for time measurement
+	clock_t begin;
+	clock_t end;
+	double time_spent_writing = 0.0;
+	double time_spent_reading = 0.0;
+	double time_spent_sorting = 0.0;
+	double time_spent_calc_avg = 0.0;
+	double time_spent_calc_minmax = 0.0;
+
+	int datasetSize = 0;
 	int bufferSize = 0;
 	char* inputFileName = NULL;
 	char* outputFileName = NULL;
 	if (argc >= 4) {
-		dataSetSize	= atoi(argv[1]);	
-		bufferSize	= atoi(argv[2]);	
+		datasetSize	= atoi(argv[1]);	
+		bufferSize	= atoi(argv[2]) * 4;	
 		inputFileName	= argv[3];	
 		outputFileName	= argv[4];	
 	}
@@ -138,45 +168,53 @@ int main(int argc, char *argv[]) {
 		return -1;
 
 	printf("Dataset Size: %d, Buffersize: %d, InputFN: %s, OutputFN: %s \n"
-			, dataSetSize, bufferSize, inputFileName, outputFileName);
+			, datasetSize, bufferSize, inputFileName, outputFileName);
 
-	createDataset(dataSetSize, inputFileName);
-	
-	// Timer
-	double time_spent = 0.0;
-	clock_t begin = clock();
+	createDataset(datasetSize, inputFileName);
 
 	// load the dateset in the memory area addressed by ds
-	float* ds = loadDataset(dataSetSize, inputFileName);
+	begin = clock();
+	float* ds = loadDataset(datasetSize, inputFileName, (size_t)bufferSize);
+	end = clock();
+	time_spent_reading = (double)(end - begin) / CLOCKS_PER_SEC;
 	
 	// compute the average value of the dataset, i.e. sum_of_dataset_values / num_of_dataset_values
+	begin = clock();
 	float avg = average(ds);
+	end = clock();
+	time_spent_calc_avg += (double)(end - begin) / CLOCKS_PER_SEC;
+
+
+	begin = clock();
 	// find the max value in the dataset
 	float max = maxvalue(ds);
 	// find the min value in the dataset
 	float min = minvalue(ds);
+	end = clock();
+	time_spent_calc_minmax += (double)(end - begin) / CLOCKS_PER_SEC;
 
-	// printf("UnSorted: ");
-	// for (int i = 0; i < dataSetSize; i++)
+
+	// printf("\n\nUnSorted: ");
+	// for (int i = 0; i < datasetSize; i++)
 	// 	printf("%.1f, ", ds[i]);
 
 	//sort the dataset and copy it into the memory area pointed by sds
-	selectionSort(ds, dataSetSize);
-	// printf("UnSorted: ");
-	// for (int i = 0; i < dataSetSize; i++)
-	// 	printf("%.1f, ", ds[i]);ze);
-	//write the sorted array into a new file plus the valies of the average, min and max as the first three records.
-	writeDataset(ds, dataSetSize, outputFileName, avg, min, max);
+	begin = clock();
+	selectionSort(ds, datasetSize);
+	end = clock();
+	time_spent_sorting += (double)(end - begin) / CLOCKS_PER_SEC;
 	
-	clock_t end = clock();
-	time_spent += (double)(end - begin) / CLOCKS_PER_SEC;
+	//write the sorted array into a new file plus the valies of the average, min and max as the first three records.
+	begin = clock();
+	writeDataset(ds, datasetSize, outputFileName, (size_t)bufferSize, avg, min, max);
+	end = clock();
+	time_spent_writing += (double)(end - begin) / CLOCKS_PER_SEC;
 
-
-	// printf("\n\nSorted: ");
-	// for (int i = 0; i < dataSetSize; i++)
-	// 	printf("%.1f, ", ds[i]);
-
-	printf("\nTime elap: %f ms\n", time_spent * 1000);
+	printf("\n\nTime Read: %f ms\n", time_spent_reading * 1000);
+	printf("Time Calc Average: %f ms\n", time_spent_calc_avg * 1000);
+	printf("Time Calc MinMax: %f ms\n", time_spent_calc_minmax * 1000);
+	printf("Time Sort: %f ms\n", time_spent_sorting * 1000);
+	printf("Time Write: %f ms\n", time_spent_writing * 1000);
 	free(ds);
 
 	return 0; 
