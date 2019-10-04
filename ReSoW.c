@@ -160,7 +160,7 @@ int main(int argc, char *argv[]) {
 	char* outputFileName = NULL;
 	if (argc >= 4) {
 		datasetSize	= atoi(argv[1]);	
-		bufferSize	= atoi(argv[2]) * 4;	
+		bufferSize	= atoi(argv[2]) * sizeof(float);	
 		inputFileName	= argv[3];	
 		outputFileName	= argv[4];	
 	}
@@ -171,51 +171,55 @@ int main(int argc, char *argv[]) {
 			, datasetSize, bufferSize, inputFileName, outputFileName);
 
 	createDataset(datasetSize, inputFileName);
-
-	// load the dateset in the memory area addressed by ds
-	begin = clock();
-	float* ds = loadDataset(datasetSize, inputFileName, (size_t)bufferSize);
-	end = clock();
-	time_spent_reading = (double)(end - begin) / CLOCKS_PER_SEC;
-	
-	// compute the average value of the dataset, i.e. sum_of_dataset_values / num_of_dataset_values
-	begin = clock();
-	float avg = average(ds);
-	end = clock();
-	time_spent_calc_avg += (double)(end - begin) / CLOCKS_PER_SEC;
-
-
-	begin = clock();
-	// find the max value in the dataset
-	float max = maxvalue(ds);
-	// find the min value in the dataset
-	float min = minvalue(ds);
-	end = clock();
-	time_spent_calc_minmax += (double)(end - begin) / CLOCKS_PER_SEC;
+	int loopCount = 10;
+	for(int i = 0; i < loopCount; i++) {
+		// load the dateset in the memory area addressed by ds
+		begin = clock();
+		float* ds = loadDataset(datasetSize, inputFileName, (size_t)bufferSize);
+		end = clock();
+		time_spent_reading += (double)(end - begin) / CLOCKS_PER_SEC;
+		
+		// compute the average value of the dataset, i.e. sum_of_dataset_values / num_of_dataset_values
+		begin = clock();
+		float avg = average(ds);
+		end = clock();
+		time_spent_calc_avg += (double)(end - begin) / CLOCKS_PER_SEC;
 
 
-	// printf("\n\nUnSorted: ");
-	// for (int i = 0; i < datasetSize; i++)
-	// 	printf("%.1f, ", ds[i]);
+		begin = clock();
+		// find the max value in the dataset
+		float max = maxvalue(ds);
+		// find the min value in the dataset
+		float min = minvalue(ds);
+		end = clock();
+		time_spent_calc_minmax += (double)(end - begin) / CLOCKS_PER_SEC;
 
-	//sort the dataset and copy it into the memory area pointed by sds
-	begin = clock();
-	selectionSort(ds, datasetSize);
-	end = clock();
-	time_spent_sorting += (double)(end - begin) / CLOCKS_PER_SEC;
-	
-	//write the sorted array into a new file plus the valies of the average, min and max as the first three records.
-	begin = clock();
-	writeDataset(ds, datasetSize, outputFileName, (size_t)bufferSize, avg, min, max);
-	end = clock();
-	time_spent_writing += (double)(end - begin) / CLOCKS_PER_SEC;
 
-	printf("\n\nTime Read: %f ms\n", time_spent_reading * 1000);
-	printf("Time Calc Average: %f ms\n", time_spent_calc_avg * 1000);
-	printf("Time Calc MinMax: %f ms\n", time_spent_calc_minmax * 1000);
-	printf("Time Sort: %f ms\n", time_spent_sorting * 1000);
-	printf("Time Write: %f ms\n", time_spent_writing * 1000);
-	free(ds);
+		// printf("\n\nUnSorted: ");
+		// for (int i = 0; i < datasetSize; i++)
+		// 	printf("%.1f, ", ds[i]);
+
+		//sort the dataset and copy it into the memory area pointed by sds
+		begin = clock();
+		selectionSort(ds, datasetSize);
+		end = clock();
+		time_spent_sorting += (double)(end - begin) / CLOCKS_PER_SEC;
+		
+		//write the sorted array into a new file plus the valies of the average, min and max as the first three records.
+		begin = clock();
+		writeDataset(ds, datasetSize, outputFileName, (size_t)bufferSize, avg, min, max);
+		end = clock();
+		time_spent_writing += (double)(end - begin) / CLOCKS_PER_SEC;
+		free(ds);
+
+	}
+
+	printf("\n\nAverage Time\n");
+	printf("Time Read: %f ms\n", (time_spent_reading * 1000) / (float)loopCount);
+	printf("Time Sort: %f ms\n", (time_spent_sorting * 1000) / (float)loopCount);
+	printf("Time Write: %f ms\n", (time_spent_writing * 1000) / (float)loopCount);
+	printf("Time Avg: %f ms\n", time_spent_calc_avg * 1000 / (float)loopCount);
+	printf("Time Min/Max: %f ms\n", time_spent_calc_minmax * 1000 / (float)loopCount);
 
 	return 0; 
 }
