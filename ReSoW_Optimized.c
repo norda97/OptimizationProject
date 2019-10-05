@@ -80,9 +80,9 @@ struct ThreadData {
 
 void* threadSort(void*data) {
 	struct ThreadData* d = data; 
-	printf("Sorting on thread! ");
+	//printf("Sorting on thread! ");
 	qsort(d->v + d->pos, d->dataSetSize, sizeof(float), cmpfunc);
-	printf("----------> Done Sorting on thread!\n");
+	//printf("----------> Done Sorting on thread!\n");
 	free(data);
 	return NULL;
 }
@@ -96,7 +96,7 @@ void startThread(pthread_t* p, int index, int nThreads, float* v, int size, size
 	data->path = NULL;
 	data->blockSize = blockSize;
 
-	printf("size: %d, newSize: %d, pos: %d\n", size, newSize, (int)data->pos);
+	printf("Starting Thread %d, size: %d, newSize: %d, pos: %d\n", index, size, newSize, (int)data->pos);
 
 	if(pthread_create(p, NULL, threadSort, data))
 		fprintf(stderr, "Error creating thread %d!\n", index);
@@ -177,13 +177,39 @@ float minvalue(float* dataSet)
 	return min;
 }
 
+struct timespec time_begin, time_end;
+/*
+	Start the timer.
+*/
+void startClock() 
+{
+	// Reset timer.
+	memset(&time_begin, 0, sizeof(time_begin));
+	memset(&time_end, 0, sizeof(time_end));
+	// Get a starting time.
+	clock_gettime(CLOCK_MONOTONIC, &time_begin);
+}
+
+/*
+	Get the time elapsed since startClock was called.
+	Return the time in milliseconds.
+*/
+double endClock()
+{
+	// Get the end time.
+	clock_gettime(CLOCK_MONOTONIC, &time_end);
+	// Calculate the time differences.
+	double sec = time_end.tv_sec - time_begin.tv_sec;
+	double nsec = time_end.tv_nsec - time_begin.tv_nsec;
+	// Add together and convert to milliseconds.
+	return sec * 1000.0 + nsec / 1000000.0;
+}
+
 int main(int argc, char *argv[]) {
 	// Generate random seeds
 	srand((unsigned int)time(NULL));
 
 	// Timers for time measurement
-	clock_t begin;
-	clock_t end;
 	double time_spent_writing = 0.0;
 	double time_spent_reading = 0.0;
 	double time_spent_sorting = 0.0;
@@ -211,8 +237,8 @@ int main(int argc, char *argv[]) {
 	int loopCount = 10;
 	for(int i = 0; i < loopCount; i++) {
 		float* ds = malloc(sizeof(float)*dataSetSize);
-		begin = clock();
-		// load the dateset in the memory area addressed by ds
+
+		startClock();
 
 		// Thread implementation on load
 		#if 0
@@ -241,26 +267,23 @@ int main(int argc, char *argv[]) {
 			loadDataset(ds, 0, dataSetSize, inputFileName, (size_t)bufferSize);
 		#endif
 
-		end = clock();
-		time_spent_reading += (double)(end - begin) / CLOCKS_PER_SEC;
+		time_spent_reading += endClock();
 
 		// compute the average value of the dataset, i.e. sum_of_dataset_values / num_of_dataset_values
-		begin = clock();
+		startClock();
 		float avg = average(ds);
-		end = clock();
-		time_spent_calc_avg += (double)(end - begin) / CLOCKS_PER_SEC;
+		time_spent_calc_avg += endClock();
 
 
-		begin = clock();
+		startClock();
 		// find the max value in the dataset
 		float max = maxvalue(ds);
 		// find the min value in the dataset
 		float min = minvalue(ds);
-		end = clock();
-		time_spent_calc_minmax += (double)(end - begin) / CLOCKS_PER_SEC;
+		time_spent_calc_minmax += endClock();
 
 		//sort the dataset and copy it into the memory area pointed by sds
-		begin = clock();
+		startClock();
 		#if 1
 			pthread_t p1;
 			startThread(&p1, 1, 4, ds, dataSetSize, bufferSize);
@@ -282,22 +305,22 @@ int main(int argc, char *argv[]) {
 				fprintf(stderr, "Error join thread %d!\n", 3);
 				return 1;	
 			}
+
+			// TODO: Merge!!
 		#else
 			qsort(ds, dataSetSize, sizeof(float), cmpfunc);
 		#endif
 
-		end = clock();
-		time_spent_sorting += (double)(end - begin) / CLOCKS_PER_SEC;
+		time_spent_sorting += endClock();
 
 		//printf("\n\nSorted: ");
 		//for (int i = 0; i < dataSetSize; i++)
 		//	printf("%.1f, ", ds[i]);
 
 		//write the sorted array into a new file plus the valies of the average, min and max as the first three records.
-		begin = clock();
+		startClock();
 		writeDataset(0, ds, dataSetSize, outputFileName, (size_t)bufferSize, avg, min, max);
-		end = clock();
-		time_spent_writing += (double)(end - begin) / CLOCKS_PER_SEC;
+		time_spent_writing += endClock();
 
 		free(ds);
 	}
@@ -305,11 +328,11 @@ int main(int argc, char *argv[]) {
 	#define DATA_SIZE 7
 	float data[DATA_SIZE] = {dataSetSize, bufferSize, 0, 0, 0, 0, 0};
 	
-	data[2] = (time_spent_reading * 1000) / (float)loopCount;
-	data[3] = (time_spent_sorting * 1000) / (float)loopCount;
-	data[4] = (time_spent_writing * 1000) / (float)loopCount;
-	data[5] = (time_spent_calc_avg * 1000) / (float)loopCount;
-	data[6] = (time_spent_calc_minmax * 1000) / (float)loopCount;
+	data[2] = (time_spent_reading) / (float)loopCount;
+	data[3] = (time_spent_sorting) / (float)loopCount;
+	data[4] = (time_spent_writing) / (float)loopCount;
+	data[5] = (time_spent_calc_avg) / (float)loopCount;
+	data[6] = (time_spent_calc_minmax) / (float)loopCount;
 
 	printf("\nAverage Time\n");
 	printf("Time Read: %f ms\n", data[2]);
