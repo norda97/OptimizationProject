@@ -59,7 +59,7 @@ void loadDataset(float* v, long int pos, int dataSetSize, char *path, size_t blo
 	//printf("Position %d\n", (int)pos);
 
 	
-	int index = 0;
+	int index = pos/sizeof(float);
 	for(int i = 0; i < (int)count; i++) {
 		size_t t = fread(&v[index], blockSize, 1, fp);
 		index += blockSize / sizeof(float);
@@ -96,7 +96,7 @@ void startThread(pthread_t* p, int index, int nThreads, float* v, int size, size
 	data->path = NULL;
 	data->blockSize = blockSize;
 
-	printf("Starting Thread %d, size: %d, newSize: %d, pos: %d\n", index, size, newSize, (int)data->pos);
+	//printf("Starting Thread %d, size: %d, newSize: %d, pos: %d\n", index, size, newSize, (int)data->pos);
 
 	if(pthread_create(p, NULL, threadSort, data))
 		fprintf(stderr, "Error creating thread %d!\n", index);
@@ -124,8 +124,8 @@ int writeDataset(long int pos, float* v, int dataSetSize, char *path, size_t blo
 	double count = (double)fileSize/(double)blockSize;
 	count = ceil(count);
 	
-	int index = 0;
-	for(int i=pos/sizeof(float); i<(int)count; i++){
+	int index = pos/sizeof(float);
+	for(int i=0; i<(int)count; i++){
 		fwrite(&v[index], blockSize, 1, fp);
 		index += blockSize / sizeof(float);
 	}
@@ -178,6 +178,7 @@ float minvalue(float* dataSet)
 }
 
 struct timespec time_begin, time_end;
+clock_t tb, te;
 /*
 	Start the timer.
 */
@@ -186,8 +187,11 @@ void startClock()
 	// Reset timer.
 	memset(&time_begin, 0, sizeof(time_begin));
 	memset(&time_end, 0, sizeof(time_end));
+	//printf("time_begin -> sec: %ld, nsec: %ld\n", time_begin.tv_sec, time_begin.tv_nsec);
+	//printf("time_end -> sec: %ld, nsec: %ld\n", time_end.tv_sec, time_end.tv_nsec);
 	// Get a starting time.
-	clock_gettime(CLOCK_MONOTONIC, &time_begin);
+	clock_gettime(CLOCK_REALTIME, &time_begin);
+	tb = clock();
 }
 
 /*
@@ -197,12 +201,18 @@ void startClock()
 double endClock()
 {
 	// Get the end time.
-	clock_gettime(CLOCK_MONOTONIC, &time_end);
+	clock_gettime(CLOCK_REALTIME, &time_end);
+	//printf("AFTER time_begin -> sec: %ld, nsec: %ld\n", time_begin.tv_sec, time_begin.tv_nsec);
+	//printf("AFTER time_end -> sec: %ld, nsec: %ld\n", time_end.tv_sec, time_end.tv_nsec);
 	// Calculate the time differences.
-	double sec = time_end.tv_sec - time_begin.tv_sec;
-	double nsec = time_end.tv_nsec - time_begin.tv_nsec;
+	time_t sec = time_end.tv_sec - time_begin.tv_sec;
+	long nsec = time_end.tv_nsec - time_begin.tv_nsec;
+	//printf("\tDiff sec: %ld, nsec: %ld\n", sec, nsec);
+	
+	te = clock();
+	printf("[Clock] diff: %lf\n", (double)(te-tb)/CLOCKS_PER_SEC * 1000.0);
 	// Add together and convert to milliseconds.
-	return sec * 1000.0 + nsec / 1000000.0;
+	return (double)sec * 1000.0 + (double)nsec / 1000000.0;
 }
 
 int main(int argc, char *argv[]) {
@@ -234,7 +244,8 @@ int main(int argc, char *argv[]) {
 
 	createDataset(dataSetSize, inputFileName);
 
-	int loopCount = 10;
+	int loopCount = 1;
+	printf("#Iterations: %d\nProgress: 0%%", loopCount);
 	for(int i = 0; i < loopCount; i++) {
 		float* ds = malloc(sizeof(float)*dataSetSize);
 
@@ -323,23 +334,27 @@ int main(int argc, char *argv[]) {
 		time_spent_writing += endClock();
 
 		free(ds);
+
+		printf("\rProgress: %d%%", (int)(((i+1)/(float)loopCount)*100));
+		fflush(stdout);
 	}
+	printf("\n");
 	
 	#define DATA_SIZE 7
-	float data[DATA_SIZE] = {dataSetSize, bufferSize, 0, 0, 0, 0, 0};
+	double data[DATA_SIZE] = {dataSetSize, bufferSize, 0, 0, 0, 0, 0};
 	
-	data[2] = (time_spent_reading) / (float)loopCount;
-	data[3] = (time_spent_sorting) / (float)loopCount;
-	data[4] = (time_spent_writing) / (float)loopCount;
-	data[5] = (time_spent_calc_avg) / (float)loopCount;
-	data[6] = (time_spent_calc_minmax) / (float)loopCount;
+	data[2] = (time_spent_reading) / (double)loopCount;
+	data[3] = (time_spent_sorting) / (double)loopCount;
+	data[4] = (time_spent_writing) / (double)loopCount;
+	data[5] = (time_spent_calc_avg) / (double)loopCount;
+	data[6] = (time_spent_calc_minmax) / (double)loopCount;
 
 	printf("\nAverage Time\n");
-	printf("Time Read: %f ms\n", data[2]);
-	printf("Time Sort: %f ms\n", data[3]);
-	printf("Time Write: %f ms\n",data[4]);
-	printf("Time Avg: %f ms\n", data[5]);
-	printf("Time Min/Max: %f ms\n", data[6]);
+	printf("Time Read: %lf ms\n", data[2]);
+	printf("Time Sort: %lf ms\n", data[3]);
+	printf("Time Write: %lf ms\n",data[4]);
+	printf("Time Avg: %lf ms\n", data[5]);
+	printf("Time Min/Max: %lf ms\n", data[6]);
 
 	char path[] = "data.csv";
 	char desc[] = "Data_Size,Buffer_size,Read,Sort,Write,Avg,Min/Max\n";
